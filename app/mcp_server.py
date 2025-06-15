@@ -13,22 +13,21 @@ async def add_numbers(a: float, b: float) -> float:
     """
     return a + b
 
-@mcp.tool(name="get_weather", description="Get weather details for a given location")
-async def get_weather(location: str) -> dict:
+@mcp.tool(name="get_weather", description="Get weather details using latitude and longitude")
+async def get_weather(lat: float, lon: float) -> dict:
     """
-    Fetches current weather for the specified location using OpenWeatherMap API.
-
-    Environment variable:
-      OPENWEATHER_API_KEY: Your API key from OpenWeatherMap
+    Fetches current weather for the specified coordinates using OpenWeatherMap API.
     """
-    api_key = os.getenv("OPENWEATHER_API_KEY")
+    api_key = ""
     if not api_key:
-        raise ValueError("OPENWEATHER_API_KEY environment variable not set")
+        raise ValueError("OPENWEATHER_API_KEY is missing")
+    print(f"Coordinates: lat={lat}, lon={lon}")
 
     # Call OpenWeatherMap API
-    url = "http://api.openweathermap.org/data/2.5/weather"
+    url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
-        "q": location,
+        "lat": lat,
+        "lon": lon,
         "appid": api_key,
         "units": "metric"
     }
@@ -42,6 +41,7 @@ async def get_weather(location: str) -> dict:
         "temperature_celsius": data.get("main", {}).get("temp"),
         "weather_description": data.get("weather", [{}])[0].get("description")
     }
+
 
 if __name__ == "__main__":
     app = mcp.sse_app()
