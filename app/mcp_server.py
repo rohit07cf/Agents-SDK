@@ -42,6 +42,38 @@ async def get_weather(lat: float, lon: float) -> dict:
         "weather_description": data.get("weather", [{}])[0].get("description")
     }
 
+@mcp.tool(name="filter_s3_user_violations", description="Fetch S3 user violations based on model_config and user_id tags")
+async def filter_s3_user_violations(model_config: str, user_id: str) -> list:
+    """
+    Scans S3 user violations under a given prefix and returns contents of files
+    matching the specified model_config and user_id.
+    """
+    bucket_name = 'romitestbucket07'
+    prefix = 'llm-dev/security_data/'
+    
+    s3 = boto3.client('s3')
+    paginator = s3.get_paginator('list_objects_v2')
+    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+    
+    matched_files = []
+
+    for page in page_iterator:
+        for obj in page.get('Contents', []):
+            key = obj['Key']
+            if key.endswith('/'):
+                continue
+
+            tagging = s3.get_object_tagging(Bucket=bucket_name, Key=key)
+            tags = {tag['Key']: tag['Value'] for tag in tagging['TagSet']}
+            
+            if tags.get("model_config") == model_config and tags.get("user_id") == user_id:
+                response = s3.get_object(Bucket=bucket_name, Key=key)
+                content = response['Body'].read().decode('utf-8')
+                matched_files.append({
+                    "content": content
+                })
+
+    return matched_files
 
 if __name__ == "__main__":
     app = mcp.sse_app()
