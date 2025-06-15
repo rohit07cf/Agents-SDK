@@ -1,3 +1,5 @@
 openai-agents
 boto3
 agents
+fastmcp
+openai
