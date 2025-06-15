@@ -1,4 +1,4 @@
-openai-agents
+openai-agents==0.0.14
 boto3
 agents
 fastmcp
