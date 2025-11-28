@@ -1,40 +1,3 @@
-# # main.py
-# import asyncio
-# from agent_tree import AgentNode, AgentTree
-# from tree import SimpleAgent  # our LLM agent class
-
-# async def main():
-#     # CREATE AGENT TREE HERE 👇
-#     supervisor = AgentNode("Supervisor")
-#     simple_agent_node = supervisor.add_child(AgentNode("SimpleAgent", agent=SimpleAgent()))
-
-#     # Attach tools to SimpleAgent
-#     simple_agent_node.add_tool("add_numbers")
-#     simple_agent_node.add_tool("echo_text")
-
-#     # Final agent tree object
-#     tree = AgentTree(root=supervisor)
-
-#     # Visualize in console
-#     tree.visualize()
-
-#     # Run agent
-#     result = await simple_agent_node.agent.run("Please add the numbers")
-
-# # Run event loop
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
-
-
-
-
-
-
-
-
-
-
 # main.py
 import asyncio
 
@@ -42,19 +5,30 @@ from agent_tree import AgentNode, AgentTree
 from tree import SimpleAgent, MathAgent, EchoAgent, ClassifierAgent
 from supervisor import SupervisorAgent
 
+from agents import Runner  # OpenAI Agents SDK Runner
+
+
 async def main():
     # ------------------------------------------------------------------
-    # CREATE SUPERVISOR ROOT NODE
+    # CREATE SUPERVISOR ROOT NODE (STRUCTURAL TREE)
     # ------------------------------------------------------------------
-    supervisor = AgentNode("Supervisor")
+    supervisor_node = AgentNode("Supervisor")
 
     # ------------------------------------------------------------------
     # CREATE AGENTS
     # ------------------------------------------------------------------
-    simple_agent_node = supervisor.add_child(AgentNode("SimpleAgent", agent=SimpleAgent()))
-    math_agent_node = supervisor.add_child(AgentNode("MathAgent", agent=MathAgent()))
-    echo_agent_node = supervisor.add_child(AgentNode("EchoAgent", agent=EchoAgent()))
-    classifier_agent_node = supervisor.add_child(AgentNode("ClassifierAgent", agent=ClassifierAgent()))
+    simple_agent_node = supervisor_node.add_child(
+        AgentNode("SimpleAgent", agent=SimpleAgent())
+    )
+    math_agent_node = supervisor_node.add_child(
+        AgentNode("MathAgent", agent=MathAgent())
+    )
+    echo_agent_node = supervisor_node.add_child(
+        AgentNode("EchoAgent", agent=EchoAgent())
+    )
+    classifier_agent_node = supervisor_node.add_child(
+        AgentNode("ClassifierAgent", agent=ClassifierAgent())
+    )
 
     # ------------------------------------------------------------------
     # ATTACH TOOLS TO EACH AGENT
@@ -79,14 +53,41 @@ async def main():
     # ------------------------------------------------------------------
     # BUILD FINAL AGENT TREE
     # ------------------------------------------------------------------
-    tree = AgentTree(root=supervisor)
+    tree = AgentTree(root=supervisor_node)
 
-    # Visualize structure
+    # Visualize the structure
     tree.visualize()
 
-    # Run agent
-    result = await simple_agent_node.agent.run("Please add the numbers")
-    print("\nFINAL RESULT:", result)
+    # ------------------------------------------------------------------
+    # USE OPENAI AGENTS SDK SUPERVISOR + Runner.run
+    # ------------------------------------------------------------------
+    user_message = "Please add the numbers 10 and 32"
+
+    # LLM supervisor – real OpenAI agent
+    supervisor_agent = SupervisorAgent()
+
+    sup_result = await Runner.run(
+        starting_agent=supervisor_agent,
+        input=user_message,
+    )
+    sup_decision = str(sup_result.final_output)
+    print("\n🤖 SUPERVISOR LLM DECISION:", sup_decision)
+
+    # Naive router: just pick MathAgent if supervisor mentioned it,
+    # otherwise fall back to SimpleAgent (you can make this smarter).
+    chosen_node = simple_agent_node
+    if "MathAgent" in sup_decision:
+        chosen_node = math_agent_node
+    elif "EchoAgent" in sup_decision:
+        chosen_node = echo_agent_node
+    elif "ClassifierAgent" in sup_decision:
+        chosen_node = classifier_agent_node
+
+    print(f"\n🚀 RUNNING CHILD AGENT: {chosen_node.name}")
+    final_result = await chosen_node.agent.run(user_message)
+
+    print("\nFINAL RESULT FROM CHILD AGENT:")
+    print(final_result)
 
 
 if __name__ == "__main__":
