@@ -2,3 +2,4 @@ openai-agents
 openai
 typing_extensions
 graphviz
+streamlit
