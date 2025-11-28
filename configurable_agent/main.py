@@ -1,93 +1,87 @@
 # main.py
 import asyncio
+import json
+
+from agents import Runner
 
 from agent_tree import AgentNode, AgentTree
-from tree import SimpleAgent, MathAgent, EchoAgent, ClassifierAgent
-from supervisor import SupervisorAgent
+from models import SupervisorOutput
+from hooks import MyRunHooks
+from sdk_agents import (
+    supervisor_agent,
+    simple_agent,
+    math_agent,
+    echo_agent,
+    classifier_agent,
+)
+from reasoner import call_reasoner
 
-from agents import Runner  # OpenAI Agents SDK Runner
+
+def build_agents_and_tools_map():
+    """Describe tools per agent for the planner."""
+    return {
+        "Supervisor": ["transfer_to_supervisor", "reasoning_step"],  # conceptually
+        "SimpleAgent": ["add_numbers", "echo_text"],
+        "MathAgent": ["add_numbers", "subtract_numbers", "multiply_numbers"],
+        "EchoAgent": ["echo_text", "reverse_text"],
+        "ClassifierAgent": ["classify_intent", "detect_sentiment"],
+    }
 
 
 async def main():
-    # ------------------------------------------------------------------
-    # CREATE SUPERVISOR ROOT NODE (STRUCTURAL TREE)
-    # ------------------------------------------------------------------
-    supervisor_node = AgentNode("Supervisor")
-
-    # ------------------------------------------------------------------
-    # CREATE AGENTS
-    # ------------------------------------------------------------------
-    simple_agent_node = supervisor_node.add_child(
-        AgentNode("SimpleAgent", agent=SimpleAgent())
-    )
-    math_agent_node = supervisor_node.add_child(
-        AgentNode("MathAgent", agent=MathAgent())
-    )
-    echo_agent_node = supervisor_node.add_child(
-        AgentNode("EchoAgent", agent=EchoAgent())
-    )
-    classifier_agent_node = supervisor_node.add_child(
-        AgentNode("ClassifierAgent", agent=ClassifierAgent())
+    # ----- build visualization tree (unchanged) -----
+    supervisor_node = AgentNode("Supervisor", agent=supervisor_agent)
+    simple_node = supervisor_node.add_child(AgentNode("SimpleAgent", agent=simple_agent))
+    math_node = supervisor_node.add_child(AgentNode("MathAgent", agent=math_agent))
+    echo_node = supervisor_node.add_child(AgentNode("EchoAgent", agent=echo_agent))
+    classifier_node = supervisor_node.add_child(
+        AgentNode("ClassifierAgent", agent=classifier_agent)
     )
 
-    # ------------------------------------------------------------------
-    # ATTACH TOOLS TO EACH AGENT
-    # ------------------------------------------------------------------
-    # SimpleAgent
-    simple_agent_node.add_tool("add_numbers")
-    simple_agent_node.add_tool("echo_text")
+    simple_node.tools = ["add_numbers", "echo_text"]
+    math_node.tools = ["add_numbers", "subtract_numbers", "multiply_numbers"]
+    echo_node.tools = ["echo_text", "reverse_text"]
+    classifier_node.tools = ["classify_intent", "detect_sentiment"]
 
-    # MathAgent
-    math_agent_node.add_tool("add_numbers")
-    math_agent_node.add_tool("subtract_numbers")
-    math_agent_node.add_tool("multiply_numbers")
-
-    # EchoAgent
-    echo_agent_node.add_tool("echo_text")
-    echo_agent_node.add_tool("reverse_text")
-
-    # ClassifierAgent
-    classifier_agent_node.add_tool("classify_intent")
-    classifier_agent_node.add_tool("detect_sentiment")
-
-    # ------------------------------------------------------------------
-    # BUILD FINAL AGENT TREE
-    # ------------------------------------------------------------------
     tree = AgentTree(root=supervisor_node)
-
-    # Visualize the structure
     tree.visualize()
 
-    # ------------------------------------------------------------------
-    # USE OPENAI AGENTS SDK SUPERVISOR + Runner.run
-    # ------------------------------------------------------------------
-    user_message = "Please add the numbers 10 and 32"
+    # ----- user query -----
+    user_message = "Whats the sentiments for: 'I am disappointed with the service provided'. Reverse the string '!EMOSEWA SI TIHOR'. Also multiply 2 and 3."
 
-    # LLM supervisor – real OpenAI agent
-    supervisor_agent = SupervisorAgent()
+    # ----- 1) PLANNING / REASONING CALL -----
+    agents_and_tools = build_agents_and_tools_map()
+    previous_tool_calls = []  # later you can record & feed this back
 
-    sup_result = await Runner.run(
-        starting_agent=supervisor_agent,
-        input=user_message,
+    plan = await call_reasoner(
+        current_agent="Supervisor",
+        agents_and_tools=agents_and_tools,
+        previous_tool_calls=previous_tool_calls,
+        input_message=user_message,
     )
-    sup_decision = str(sup_result.final_output)
-    print("\n🤖 SUPERVISOR LLM DECISION:", sup_decision)
 
-    # Naive router: just pick MathAgent if supervisor mentioned it,
-    # otherwise fall back to SimpleAgent (you can make this smarter).
-    chosen_node = simple_agent_node
-    if "MathAgent" in sup_decision:
-        chosen_node = math_agent_node
-    elif "EchoAgent" in sup_decision:
-        chosen_node = echo_agent_node
-    elif "ClassifierAgent" in sup_decision:
-        chosen_node = classifier_agent_node
+    print("\n🧠 PLANNER OUTPUT (REASONING PLAN):")
+    print(json.dumps(plan, indent=2))
 
-    print(f"\n🚀 RUNNING CHILD AGENT: {chosen_node.name}")
-    final_result = await chosen_node.agent.run(user_message)
+    # Simple example: tuck the plan + user query together
+    execution_input = (
+        "SYSTEM PLAN (from planner):\n"
+        + json.dumps(plan, indent=2)
+        + "\n\nUSER QUERY:\n"
+        + user_message
+    )
 
-    print("\nFINAL RESULT FROM CHILD AGENT:")
-    print(final_result)
+    # ----- 2) EXECUTION VIA SUPERVISOR + CHILD AGENTS -----
+    result = await Runner.run(
+        starting_agent=supervisor_agent,
+        input=execution_input,
+        hooks=MyRunHooks(),
+    )
+
+    print("\n🏁 FINAL OUTPUT FROM PIPELINE:")
+    print(result.final_output)
+    print("======================================================================================")
+    print(SupervisorOutput.model_validate_json(result.final_output.model_dump_json(indent=2)))
 
 
 if __name__ == "__main__":

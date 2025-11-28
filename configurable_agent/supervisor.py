@@ -1,5 +1,6 @@
 # supervisor.py
 from agents import Agent as OAAgent
+from models import SupervisorOutput
 
 
 class SupervisorAgent(OAAgent):
