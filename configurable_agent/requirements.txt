@@ -3,3 +3,4 @@ openai
 typing_extensions
 graphviz
 streamlit
+temporalio

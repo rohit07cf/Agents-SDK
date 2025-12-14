@@ -1,11 +1,7 @@
 # reasoner.py
-import json
 from typing import Any, Dict, List
-
 from openai import AsyncOpenAI
 from reasoning_prompt import build_reasoning_prompt
-
-client = AsyncOpenAI()
 
 
 async def call_reasoner(
@@ -17,13 +13,11 @@ async def call_reasoner(
     model: str = "gpt-4.1-mini",
 ) -> Dict[str, Any]:
     """
-    Call the LLM with the big ReAct reasoning prompt and return a parsed JSON plan.
-
-    Returns one of:
-      {"type": "tool", "tool_name": "...", "arguments": {...}}
-      {"type": "transfer", "target_agent": "...", "reason": "..."}
-      {"type": "final", "answer": "..."}
+    Call the LLM with the big ReAct reasoning prompt and return parsed plan.
+    OpenAI client is created lazily inside the activity, not at import time.
     """
+    client = AsyncOpenAI()  # ✅ now inside function, safe for activities
+
     system_prompt = build_reasoning_prompt(
         current_agent=current_agent,
         agents_and_tools=agents_and_tools,
@@ -39,7 +33,5 @@ async def call_reasoner(
         ],
     )
 
-    # Adapt this extractor if your openai version differs slightly
-    content = response.output[0].content[0].text  # type: ignore[attr-defined]
-    plan = json.loads(content)
-    return plan
+    # parse() already returns structured output; adapt if needed
+    return response.output
